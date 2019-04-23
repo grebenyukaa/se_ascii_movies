@@ -125,14 +125,34 @@ namespace LZW
             int bitsPerCode = (int)Math.Ceiling(Math.Log(nextCode - 1, 2.0));
             int fullBytes = (int)Math.Ceiling(bitsPerCode / 8.0);
 
+            int[] fullByteCodeStart = new int[fullBytes];
+            int[] fullByteCodeEnd = new int[fullBytes];
+            fullByteCodeStart[0] = 0;
+            int idx = 0;
+            for (int i = 1; i < fullBytes; ++i)
+            {
+                idx = Array.FindIndex(input, idx, x => ((((byte)1) << (i * 8)) & x) != 0);
+                fullByteCodeStart[i] = idx;
+                fullByteCodeEnd[i - 1] = idx - 1;
+            }
+            fullByteCodeEnd[fullBytes - 1] = input.Length - 1;
+
             List<byte> ret = new List<byte>();
             ret.AddRange(BitConverter.GetBytes(fullBytes));
 
-            foreach (code_type code in input)
+            // write full byte boundaries
+            for (int i = 0; i < fullBytes; ++i)
             {
-                code_type _code = code;
-                byte[] curBytes = new byte[fullBytes];
-                for (int b = 0; b < fullBytes; ++b)
+                ret.AddRange(BitConverter.GetBytes(fullByteCodeStart[i]));
+                ret.AddRange(BitConverter.GetBytes(fullByteCodeEnd[i] - fullByteCodeStart[i]));
+            }
+
+            for (int i = 0; i < input.Length; ++i)
+            {
+                code_type _code = input[i];
+                int curFullBytes = Array.FindIndex(fullByteCodeEnd, x => i <= x) + 1;
+                byte[] curBytes = new byte[curFullBytes];
+                for (int b = 0; b < curFullBytes; ++b)
                 {
                     curBytes[/*fullBytes - 1 - */b] = (byte)(_code & byte.MaxValue);
                     _code = _code >> 8;
