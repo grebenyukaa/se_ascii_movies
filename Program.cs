@@ -120,6 +120,61 @@ namespace LZW
             return code;
         }
 
+        /// Packs bits in the following fashion:
+        ///   Encode() output is aligned to code_type size, but this is a waste of precious space.
+        ///   So, we calculate full-byte boundaries, e.g. boundaries, where another 1 byte is needed for the byte representation of the code. 
+        ///
+        ///   NOTE: .NET uses little-endian byte order and big endian bit order.
+        ///
+        /// Input:
+        ///
+        /// 00000000 00000000 00000000 11111110
+        /// 00000000 00000000 00000000 11111111
+        /// 00000000 00000000 00000001 00000000
+        /// ...
+        /// 00000000 00000000 11111111 11111111
+        /// 00000000 00000001 00000000 00000000
+        /// 00000000 00000001 00000000 00000001
+        ///
+        /// Boundaries:
+        ///
+        /// 00000000 00000000 00000000 11111110
+        /// 00000000 00000000 00000000 11111111
+        /// -------- full byte boundary -------
+        /// 00000000 00000000 00000001 00000000
+        /// ...
+        /// 00000000 00000000 11111111 11111111
+        /// -------- full byte boundary -------
+        /// 00000000 00000001 00000000 00000000
+        /// 00000000 00000001 00000000 00000001
+        ///
+        /// Wasted bytes, shown inside | |
+        ///
+        /// |00000000 00000000 00000000| 11111110
+        /// |00000000 00000000 00000000| 11111111
+        /// -------- full byte boundary -------
+        /// |00000000 00000000| 00000001 00000000
+        /// ...
+        /// |00000000 00000000| 11111111 11111111
+        /// -------- full byte boundary -------
+        /// |00000000| 00000001 00000000 00000000
+        /// |00000000| 00000001 00000000 00000001
+        ///
+        /// This approach helps us remove wasted fully zeroed top bytes and gradually align output codes by the required byte count for the max code value.
+        ///
+        /// Output:
+        /// maxFullBytes               | Int32 (4 bytes)
+        /// byteBoundaries             | maxFullBytes * Int32 (4 * maxFullBytes bytes)
+        /// 00000000                   |
+        /// ...                        |
+        /// 11111110                   |
+        /// 11111111                   | compressed codes
+        /// 00000001 00000000          |
+        /// ...                        |
+        /// 11111111 11111111          |
+        /// 00000001 00000000 00000000 |
+        /// 00000001 00000000 00000001 |
+        /// ...                        |
         public byte[] PackBits(code_type[] input)
         {
             int bitsPerCode = (int)Math.Ceiling(Math.Log(nextCode - 1, 2.0));
@@ -164,6 +219,7 @@ namespace LZW
             return ret.ToArray();
         }
 
+        /// Unpacks bits, see PackBits for the packed format desciption.
         public code_type[] UnpackBits(byte[] input)
         {
             int offset = 0;
