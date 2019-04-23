@@ -30,7 +30,7 @@ namespace Utils
 namespace LZW
 {
     static class Alphabet
-        {
+    {
         public static char[] StarWars = {'g', 'v', '0', 'D', '9', 'J', 'C', 'k', 'N', 'n', 'M', 'V', '#', '~', 'H', 't', 'P',
             '>', 'o', 'E', '|', '"', 'f', '4', 'z', 'b', '7', 'p', 'w', 'X', 'ÿ', 'a', ':', 'q', ' ', '$', 'U', '[',
             '6', 'I', 'T', 'j', 'u', 'W', ')', 'i', 'Y', '+', 's', 'S', ';', 'c', 'B', '=', 'A', '^', '`', 'K', 'R',
@@ -143,14 +143,14 @@ namespace LZW
             // write full byte boundaries
             for (int i = 0; i < fullBytes; ++i)
             {
-                ret.AddRange(BitConverter.GetBytes(fullByteCodeStart[i]));
-                ret.AddRange(BitConverter.GetBytes(fullByteCodeEnd[i] - fullByteCodeStart[i]));
+                ret.AddRange(BitConverter.GetBytes((fullByteCodeEnd[i] - fullByteCodeStart[i] + 1) * (i + 1)));
             }
 
             for (int i = 0; i < input.Length; ++i)
             {
                 code_type _code = input[i];
                 int curFullBytes = Array.FindIndex(fullByteCodeEnd, x => i <= x) + 1;
+  
                 byte[] curBytes = new byte[curFullBytes];
                 for (int b = 0; b < curFullBytes; ++b)
                 {
@@ -166,16 +166,34 @@ namespace LZW
 
         public code_type[] UnpackBits(byte[] input)
         {
+            int offset = 0;
             int fullBytes = BitConverter.ToInt32(input);
+            offset += sizeof(Int32);
+
+            int[] fullByteCodeCount = new int[fullBytes];
+            for (int i = 0; i < fullBytes; ++i)
+            {
+                fullByteCodeCount[i] = BitConverter.ToInt32(input, offset);
+                offset += sizeof(Int32);
+            }
+
+            int[] fullByteCodeEnd = new int[fullBytes];
+            int idx = offset;
+            for (int i = 0; i < fullBytes; ++i)
+            {
+                fullByteCodeEnd[i] = idx + fullByteCodeCount[i] - 1;
+                idx += fullByteCodeCount[i];
+            }
 
             byte[] buf = new byte[sizeof(code_type)];
-
             List<code_type> ret = new List<code_type>();
-            for (int i = 4; i < input.Length; i += fullBytes)
+            for (int i = offset; i < input.Length;)
             {
-                for (int j = 0; j < fullBytes; ++j)
-                buf[j] = input[i + j];
+                int curFullBytes = Array.FindIndex(fullByteCodeEnd, x => i <= x) + 1;
+                for (int j = 0; j < curFullBytes; ++j)
+                    buf[j] = input[i + j];
                 ret.Add(Utils.Converter.ToCodeType(buf));
+                i += curFullBytes;
             }
 
             return ret.ToArray();
