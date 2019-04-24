@@ -5,7 +5,8 @@ using System.Text;
 
 using System.IO;
 
-class code_type : IComparable<code_type>, IEquatable<code_type>
+#region ingame_script
+struct code_type : IComparable<code_type>, IEquatable<code_type>
 {
     public code_type(int val)
     {
@@ -344,6 +345,8 @@ class AsciiMovie
     }
     private string[] rowStream;
 }
+
+#endregion ingame_script
 
 namespace test
 {
