@@ -5,18 +5,18 @@ This facility helps to play ASCII movies in Space Engineers, using only ingame s
 Internally it compresses a text movie file using a modified version of the LZW algorithm and outputs a base64 encoded binary file.
 
 ## How to play a movie ingame
-To playback this movie inside the game you need to follow theese steps (also see Ingame.cs_):
+To playback this movie inside the game you need to follow theese steps (also see [Ingame.cs_](https://github.com/grebenyukaa/se_ascii_movies/blob/master/Ingame.cs_)):
   1. Create a programmable block, named "movie theater server"
   1. Create somewhere on the same grid an LCD screen, named "movie theater screen"
-  1. Put base64 encoded data into its CustomData field.
+  1. Put base64 encoded data into programmable block's CustomData field.
   1. Put contents of [Ingame.cs_](https://github.com/grebenyukaa/se_ascii_movies/blob/master/Ingame.cs_) into the code of the programmable block.
-  1. Run the code
+  1. Run the code.
 
 ## How to create a compressed movie
 Install vscode with nuget and omnisharp.
 
-To create a base64 encoded compressed movie you need to follow theese steps (see Program.cs):
-  1. Specify the alphabet of your text movie in [Alphabet.cs](https://github.com/grebenyukaa/se_ascii_movies/blob/master/Alphabet.cs) and [Ingame.cs_](https://github.com/grebenyukaa/se_ascii_movies/blob/master/Ingame.cs_). Currently the only alphabet supported is the alphabet of assciimation's Staw Wars. Alphabet is the set of distinct characters in your movie representation.
+To create a base64 encoded compressed movie you need to follow theese steps (see [Program.cs](https://github.com/grebenyukaa/se_ascii_movies/blob/master/Program.cs)):
+  1. Specify the alphabet of your text movie in [Alphabet.cs](https://github.com/grebenyukaa/se_ascii_movies/blob/master/Alphabet.cs) and [Ingame.cs_](https://github.com/grebenyukaa/se_ascii_movies/blob/master/Ingame.cs_). Currently the only alphabet supported is the alphabet of assciimation's Star Wars. An alphabet is a set of distinct characters in your movie representation.
   1. Adjust paths and the alphabet in [Program.cs](https://github.com/grebenyukaa/se_ascii_movies/blob/master/Program.cs) to your own needs to create the encoded movie
   1. Run the program and wait until it finishes.
 
