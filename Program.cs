@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
 
 using System.IO;
 
@@ -61,6 +63,7 @@ static class Alphabet
     };
 }
 
+#region plain LZW
 class LZW
 {
     public LZW(char[] alphabet)
@@ -190,15 +193,16 @@ class LZW
     /// |00000000| 00000001 00000000 00000000
     /// |00000000| 00000001 00000000 00000001
     ///
-    /// This approach helps us remove wasted fully zeroed top bytes and gradually align output codes by the required byte count for the max code value.
+    /// This approach helps us remove the wasted fully zeroed top bytes and gradually align output codes by the required byte count for the max code value.
     ///
     /// Output:
+    /// inputStringLen             | Int32 (4 bytes)
     /// maxFullBytes               | Int32 (4 bytes)
     /// byteBoundaries             | maxFullBytes * Int32 (4 * maxFullBytes bytes)
-    /// 00000000                   |
+    /// 00000000                   | compressed codes ...
     /// ...                        |
     /// 11111110                   |
-    /// 11111111                   | compressed codes
+    /// 11111111                   |
     /// 00000001 00000000          |
     /// ...                        |
     /// 11111111 11111111          |
@@ -223,10 +227,9 @@ class LZW
         fullByteCodeEnd[fullBytes - 1] = input.Length - 1;
 
         // write header:
+        //    inputStringLen :: Int32
         //    fullByteCount :: Int32
         //    fullByteCount * fullByteCodeCount :: Int32
-        //    inputStringLen :: Int32
-
         List<byte> ret = new List<byte>();
         ret.AddRange(BitConverter.GetBytes(inLen));
         ret.AddRange(BitConverter.GetBytes(fullBytes));
@@ -277,18 +280,23 @@ class LZW
         }
 
         // read data
+        int codeArrayLen = 0;
+        for (int cc = 0; cc < fullByteCodeCount.Length; ++cc)
+            codeArrayLen += fullByteCodeCount[cc] / (cc + 1);
+        code_type[] ret = new code_type[codeArrayLen];
+
         byte[] buf = new byte[/*sizeof(*/code_type.sizeOf/*)*/];
-        List<code_type> ret = new List<code_type>();
-        for (int i = offset; i < input.Length;)
+        for (int i = offset, ri = 0; i < input.Length;)
         {
             int curFullBytes = Array.FindIndex(fullByteCodeEnd, x => i <= x) + 1;
             for (int j = 0; j < curFullBytes; ++j)
                 buf[j] = input[i + j];
-            ret.Add(Converter.ToCodeType(buf));
+            
+            ret[ri++] = Converter.ToCodeType(buf);
             i += curFullBytes;
         }
 
-        return ret.ToArray();
+        return ret;
     }
 
     private int ReadInt32(byte[] input, ref int offset)
@@ -302,6 +310,164 @@ class LZW
     private Dictionary<code_type, string> revDict;
     private code_type nextCode;
     private char[] alphabet;
+}
+#endregion plain LZW
+
+class LZWInputStream
+{
+    public LZWInputStream(int blockSize)
+    {
+        this.blockSize = blockSize;
+    }
+
+    public class UnpackBitsState
+    {
+        public UnpackBitsState(byte[] input)
+        {
+            inputIndex = 0;
+            outputStringLen = ReadInt32(input);
+            fullBytes = ReadInt32(input);
+            fullByteCodeCount = new int[fullBytes];
+            for (int i = 0; i < fullBytes; ++i)
+            {
+                fullByteCodeCount[i] = ReadInt32(input);
+            }
+
+            fullByteCodeEnd = new int[fullBytes];
+            int idx = inputIndex;
+            for (int i = 0; i < fullBytes; ++i)
+            {
+                fullByteCodeEnd[i] = idx + fullByteCodeCount[i] - 1;
+                idx += fullByteCodeCount[i];
+            }
+
+            int codeArrayLen = 0;
+            for (int cc = 0; cc < fullByteCodeCount.Length; ++cc)
+                codeArrayLen += fullByteCodeCount[cc] / (cc + 1);
+            codes = new code_type[codeArrayLen];
+        }
+
+        public void UnpackNext(byte[] input, int lastIndex)
+        {
+            byte[] buf = new byte[code_type.sizeOf];
+            for (; inputIndex <= lastIndex;)
+            {
+                int curFullBytes = Array.FindIndex(fullByteCodeEnd, x => inputIndex <= x) + 1;
+                for (int j = 0; j < curFullBytes; ++j)
+                    buf[j] = input[inputIndex + j];
+                
+                codes[codeIndex++] = Converter.ToCodeType(buf);
+                inputIndex += curFullBytes;
+            }
+        }
+
+        private int ReadInt32(byte[] input)
+        {
+            int ret = BitConverter.ToInt32(input, inputIndex);
+            inputIndex += sizeof(Int32);
+            return ret;
+        }
+
+        public code_type[] codes { get; private set; }
+        public int outputStringLen { get; private set; }
+
+        private int inputIndex;
+        private int codeIndex;
+        private int fullBytes;
+        private int[] fullByteCodeCount;
+        private int[] fullByteCodeEnd;
+    }
+
+    public class DecoderState
+    {
+        public DecoderState(char[] alphabet, code_type[] input, int outputStringLen)
+        {
+            nextCode = 0;
+            revDict = new Dictionary<code_type, string>();
+            foreach (char c in alphabet)
+            {
+                AddSymbol(c.ToString());
+            }
+
+            text = new char[outputStringLen];
+            
+            inputIndex = 0;
+            old = input[inputIndex++];
+            s = revDict[old];
+
+            outputIndex = 0;
+            s.CopyTo(0, text, outputIndex, s.Length);
+            outputIndex += s.Length;
+        }
+
+        public void DecodeNext(code_type[] input, int lastIndex)
+        {
+            // see https://www.geeksforgeeks.org/lzw-lempel-ziv-welch-compression-technique/
+
+            for (; inputIndex <= lastIndex; ++inputIndex)
+            {
+                code_type code = input[inputIndex];
+                if (!revDict.ContainsKey(code))
+                { 
+                    s = revDict[old] + s[0];
+                } 
+                else
+                { 
+                    s = revDict[code];
+                } 
+
+                s.CopyTo(0, text, outputIndex, s.Length);
+                outputIndex += s.Length;
+
+                AddSymbol(revDict[old] + s[0]);
+                old = code;
+            }
+        }
+
+        private code_type AddSymbol(string sym)
+        {
+            code_type code = nextCode++;
+            revDict.Add(code, sym);
+            return code;
+        }
+
+        public char[] text { get; private set; }
+        private int outputIndex;
+        private int inputIndex;
+        private code_type old;
+        private string s;
+
+        private code_type nextCode;
+        private Dictionary<code_type, string> revDict;
+    }
+
+    public IEnumerator<UnpackBitsState> UnpackBits(UnpackBitsState st, byte[] input)
+    {
+        int next = 0;
+        for (int i = 0; i < input.Length;)
+        {
+            next += (i + blockSize) < input.Length ? blockSize : (input.Length - i);
+            st.UnpackNext(input, next);
+            i = next + 1;
+            yield return st;
+        }
+        yield return st;
+    }
+
+    public IEnumerator<DecoderState> Decode(DecoderState st, code_type[] input)
+    {
+        int next = 0;
+        for (int i = 0; i < input.Length;)
+        {
+            next += (i + blockSize) < input.Length ? blockSize : (input.Length - i);
+            st.DecodeNext(input, next);
+            i = next + 1;
+            yield return st;
+        }
+        yield return st;
+    }
+
+    private int blockSize;
 }
 
 class AsciiMovie
@@ -343,6 +509,7 @@ class AsciiMovie
         string decodedData = lzw.Decode(input);
         rowStream = decodedData.Split(rowSep);
     }
+
     private string[] rowStream;
 }
 
@@ -369,15 +536,38 @@ namespace test
                 }
 
                 {
-                    LZW lzw = new LZW(Alphabet.StarWars);
+                    LZWInputStream lzw = new LZWInputStream(4096);
+                    string decoded;
+
                     var watch = System.Diagnostics.Stopwatch.StartNew();
-                    string decoded = lzw.Decode(encoded);
-                    watch.Stop();
+                    {
+                        var uState = new LZWInputStream.UnpackBitsState(encoded);
+                        var itp = lzw.UnpackBits(uState, encoded);
+                        while (itp.MoveNext())
+                        {}
+                        
+                        var dState = new LZWInputStream.DecoderState(Alphabet.StarWars, uState.codes, uState.outputStringLen);
+                        var itd = lzw.Decode(dState, uState.codes);
+                        while (itd.MoveNext())
+                        {}
+                        decoded = new string(dState.text);
+                    }
                     var elapsedMs = watch.ElapsedMilliseconds;
                     Console.WriteLine($"decode takes: {elapsedMs} (ms)");
 
                     Console.WriteLine($"integrity check: {data.GetHashCode() == decoded.GetHashCode()}");
                 }
+
+                // {
+                //     LZW lzw = new LZW(Alphabet.StarWars);
+                //     var watch = System.Diagnostics.Stopwatch.StartNew();
+                //     string decoded = lzw.Decode(encoded);
+                //     watch.Stop();
+                //     var elapsedMs = watch.ElapsedMilliseconds;
+                //     Console.WriteLine($"decode takes: {elapsedMs} (ms)");
+
+                //     Console.WriteLine($"integrity check: {data.GetHashCode() == decoded.GetHashCode()}");
+                // }
 
                 using (StreamWriter sw = new StreamWriter(@"C:\Users\amadeus\Desktop\space engineers\bar\movie\ascii_star_wars.base64.txt"))
                 {
