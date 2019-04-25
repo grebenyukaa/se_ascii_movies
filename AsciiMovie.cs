@@ -7,7 +7,7 @@ using LZW;
 
 namespace AsciiMovie
 {
-    class AsciiMovie
+    public class AsciiMovie
     {
         public AsciiMovie(string decodedMovie)
         {
@@ -22,7 +22,7 @@ namespace AsciiMovie
                 if (sTime.Length == 0)
                     throw new ArgumentException("bad frame data: empty");
                 
-                time = Convert.ToInt32(sTime);
+                time = Math.Max(Convert.ToInt32(sTime), 1) * 4; // 1 second = 60 ticks, value is given in 1/15th of a second
                 this.rows = rows.Skip(1).ToArray();
             }
             public string[] rows { get; private set; }

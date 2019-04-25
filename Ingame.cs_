@@ -209,7 +209,7 @@ class LZWInputStream
     private int blockSize;
 }
 
-class AsciiMovie
+public class AsciiMovie
 {
     public AsciiMovie(string decodedMovie)
     {
@@ -224,7 +224,7 @@ class AsciiMovie
             if (sTime.Length == 0)
                 throw new ArgumentException("bad frame data: empty");
             
-            time = Convert.ToInt32(sTime);
+            time = Math.Max(Convert.ToInt32(sTime), 1) * 4; // 1 second = 60 ticks, value is given in 1/15th of a second
             this.rows = rows.Skip(1).ToArray();
         }
         public string[] rows { get; private set; }
@@ -245,14 +245,20 @@ class AsciiMovie
 
 #endregion ingame_script
 
-
 ////////////////////
 
-IMyTextPanel outputPanel;
+IMyTextPanel outputPanelL;
+IMyTextPanel outputPanelC;
+IMyTextPanel outputPanelR;
+int screenPaddingLeft;
+int screenPaddingRight;
 
 byte[] encodedMovie;
 AsciiMovie movie;
+int frameWidth;
+int frameHeight;
 IEnumerator<AsciiMovie.Frame> itFrame;
+IEnumerator<bool> itSingleFramePlayback;
 
 LZWInputStream lzw;
 LZWInputStream.UnpackBitsState stUnpack;
@@ -264,18 +270,64 @@ bool unpackingFinished;
 bool decodingFinished;
 bool playbackFinished;
 
+public IEnumerator<bool> ShowFrame(AsciiMovie.Frame f)
+{
+    string[] leftPanelText = new string[f.rows.Length];
+    string[] centerPanelText = new string[f.rows.Length];
+    string[] rightPanelText = new string[f.rows.Length];
+    int screenFrameWidth = (int)(Math.Floor(frameWidth / 3.0));
+    for (int i = 0; i < f.rows.Length; ++i)
+    {
+        leftPanelText[i] = new string(f.rows[i].Take(screenFrameWidth).ToArray());//.PadLeft(screenPaddingLeft, ' ');
+        centerPanelText[i] = new string(f.rows[i].Skip(screenFrameWidth).Take(screenFrameWidth).ToArray());
+        rightPanelText[i] = new string(f.rows[i].Skip(2 * screenFrameWidth).ToArray()).PadRight(screenPaddingRight, ' ');;
+    }
+    
+    outputPanelL.WriteText(string.Join("\n", leftPanelText));
+    outputPanelC.WriteText(string.Join("\n", centerPanelText));
+    outputPanelR.WriteText(string.Join("\n", rightPanelText));
+    
+    int left = f.time;
+    for (; left > 0; --left)
+    {
+        Echo($"slleping ticks left: {left}");
+        yield return false;
+    }
+    yield return true;
+}
+
 public Program()
 {
     var gts = GridTerminalSystem;
     IMyTerminalBlock movieDataBlock = gts.GetBlockWithName("movie theater server");
-    outputPanel = (IMyTextPanel)gts.GetBlockWithName("movie theater screen");
+    
+    outputPanelL = (IMyTextPanel)gts.GetBlockWithName("movie theater screen left");
+    outputPanelC = (IMyTextPanel)gts.GetBlockWithName("movie theater screen center");
+    outputPanelR = (IMyTextPanel)gts.GetBlockWithName("movie theater screen right");
+    
+    // correct settings for a movie frame 14x68, for monospace font
+    frameWidth = 68;
+    frameHeight = 13;
+    screenPaddingLeft = 0;
+    screenPaddingRight = 1;
+    float fontSize = 1.191f;
+    string font = "Monospace";
+    outputPanelL.Font = font;
+    outputPanelL.FontSize = fontSize;
+    outputPanelL.Alignment = VRage.Game.GUI.TextPanel.TextAlignment.LEFT;
+    outputPanelC.Font = font;
+    outputPanelC.FontSize = fontSize;
+    outputPanelC.Alignment = VRage.Game.GUI.TextPanel.TextAlignment.LEFT;
+    outputPanelR.Font = font;
+    outputPanelR.FontSize = fontSize;
+    outputPanelR.Alignment = VRage.Game.GUI.TextPanel.TextAlignment.LEFT;
     
     encodedMovie = Convert.FromBase64String(movieDataBlock.CustomData);
 
     unpackingFinished = false;
     decodingFinished = false;
     playbackFinished = false;
-        
+    
     Runtime.UpdateFrequency = UpdateFrequency.Update1;
 }
 
@@ -319,18 +371,29 @@ public void Main(string argument, UpdateType updateSource)
         {
             movie = new AsciiMovie(new string(stDecode.text));
             itFrame = movie.GetFrameIterator();
-            Runtime.UpdateFrequency = UpdateFrequency.Update10;
+            Runtime.UpdateFrequency = UpdateFrequency.Update1;
         }
         
-        if (itFrame.MoveNext())
+        if (itSingleFramePlayback != null && !itSingleFramePlayback.Current)
         {
-            Echo("playing frame");
-            AsciiMovie.Frame f = itFrame.Current;
-            outputPanel.WriteText(string.Join("\n", f.rows));
+            Echo($"playing frame: sleeping ticks = {itFrame.Current.time}");
+            itSingleFramePlayback.MoveNext();
         }
         else
         {
-            playbackFinished = true;
+            if (itFrame.MoveNext())
+            {
+                Echo("playing frame");
+                AsciiMovie.Frame f = itFrame.Current;
+                itSingleFramePlayback = ShowFrame(f);
+            }
+            else
+            {
+                Echo("playback finished!");
+                playbackFinished = true;
+            }
         }
     }
+
+    Echo($"nothing else to do: playback state {!playbackFinished}");
 }
