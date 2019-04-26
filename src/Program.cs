@@ -163,23 +163,18 @@ namespace test
 
         static void StoreAlphabet(char[] alphabet, string outputPath)
         {
-            using (StreamWriter sw = new StreamWriter(Path.Combine(outputPath, "alphabet.txt")))
+            using (StreamWriter sw = new StreamWriter(Path.Combine(outputPath, "alphabet.base64.txt")))
             {
-                sw.Write(
-                    string.Join(", ",
-                        alphabet.Select(x => new string(new char[3] {'\'', x, '\''}))
-                            .Select(s => Regex.Escape(s))
-                    )
-                );
+                sw.Write(Convert.ToBase64String(Encoding.UTF8.GetBytes(alphabet)));
             }
         }
 
         static void TestAlphabet(char[] alphabet, string outputPath)
         {
-            using (StreamReader sr = new StreamReader(Path.Combine(outputPath, "alphabet.txt")))
+            using (StreamReader sr = new StreamReader(Path.Combine(outputPath, "alphabet.base64.txt")))
             {
-                string[] als = Regex.Unescape(sr.ReadToEnd()).Split(", ");
-                char[] _alphabet = als.Select(x => x.Skip(1).Take(1).ToArray()[0]).ToArray();
+                byte[] ba = Convert.FromBase64String(sr.ReadToEnd());
+                char[] _alphabet = Encoding.UTF8.GetString(ba).ToCharArray();
                 Debug.Assert(_alphabet.Zip(alphabet, (x, y) => x == y).All(x => x));
             }
         }

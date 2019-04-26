@@ -42,15 +42,6 @@ static class Converter
     }
 }
 
-static class Alphabet
-{
-    public static char[] StarWars = {'q', 'O', 'j', '8', '}', 'v', 'x', 'l', '\n', 'G', '3', 'L', 'm', '/', '{', '*', 'D', '#', 's', ']', 'g',
-        'R', '>', '"', '7', ' ', 'E', ';', 'T', '6', 'I', 'z', '.', '0', '+', 'h', 'w', 'f', '|', '5', 'N', 'M', 'Y', '=', 'k', '?', 'A', 'b',
-        'd', 'B', '<', 'U', 'X', '1', 'u', '$', '\\', 'C', '[', '-', '~', 'S', ')', 'a', 'P', 'r', 't', 'W', 'n', 'o', 'y', '%', '!', '(', '4',
-        'V', '`', 'p', 'K', ':', 'e', '@', ',', 'F', '2', 'H', '9', 'J', '_', 'c', 'i', '\'', '^'
-    };
-}
-
 class LZWInputStream
 {
     public LZWInputStream(int blockSize)
@@ -332,6 +323,12 @@ public IEnumerator<bool> ShowFrame(AsciiMovie.Frame f)
     yield return true;
 }
 
+public void RestoreAlphabet(string base64Alphabet)
+{
+    byte[] ba = Convert.FromBase64String(base64Alphabet);
+    alphabet = Encoding.UTF8.GetString(ba).ToCharArray();
+}
+
 IMyTextPanel outputPanelL;
 IMyTextPanel outputPanelC;
 IMyTextPanel outputPanelR;
@@ -339,6 +336,7 @@ int screenPaddingLeft;
 int screenPaddingRight;
 
 LZWInputStream lzw;
+char[] alphabet;
 byte[] encodedMovie;
 int frameWidth;
 int frameHeight;
@@ -352,6 +350,8 @@ public Program()
 {
     var gts = GridTerminalSystem;  
     lzw = new LZWInputStream(2048);
+    var base64Alphabet = "CiAhIiMkJScoKSorLC0uLzAxMjM0NTY3ODk6Ozw9Pj9AQUJDREVGR0hJSktMTU5PUFJTVFVWV1hZW1xdXl9gYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXp7fH1+";
+    RestoreAlphabet(base64Alphabet);
 
     outputPanelL = (IMyTextPanel)gts.GetBlockWithName("movie theater screen left");
     outputPanelC = (IMyTextPanel)gts.GetBlockWithName("movie theater screen center");
@@ -412,7 +412,7 @@ public IEnumerator<bool> GetMovieCycleIterator()
     }
 
     // decode with LZW
-    var stDecode = new LZWInputStream.DecoderState(Alphabet.StarWars, stUnpack.codes, stUnpack.outputStringLen);
+    var stDecode = new LZWInputStream.DecoderState(alphabet, stUnpack.codes, stUnpack.outputStringLen);
     var itDecode = lzw.Decode(stDecode, stUnpack.codes);
     while (!decodingFinished)
     {
