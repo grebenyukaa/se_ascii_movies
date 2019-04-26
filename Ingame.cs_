@@ -338,33 +338,19 @@ IMyTextPanel outputPanelR;
 int screenPaddingLeft;
 int screenPaddingRight;
 
+LZWInputStream lzw;
 byte[] encodedMovie;
-AsciiMovie movie;
-ConfigState stConfig;
-IEnumerator<bool> itConfig;
-
 int frameWidth;
 int frameHeight;
-IEnumerator<AsciiMovie.Frame> itFrame;
-IEnumerator<bool> itSingleFramePlayback;
-
-LZWInputStream lzw;
-LZWInputStream.UnpackBitsState stUnpack;
-IEnumerator<LZWInputStream.UnpackBitsState> itUnpack;
-LZWInputStream.DecoderState stDecode;
-IEnumerator<LZWInputStream.DecoderState> itDecode;
-
 bool processingConfigFinished;
 bool unpackingFinished;
 bool decodingFinished;
 bool playbackFinished;
+IEnumerator<bool> itWholeMovieCycle;
 
 public Program()
 {
-    var gts = GridTerminalSystem;
-    stConfig = new ConfigState(this);
-    itConfig = ProcessConfig(stConfig);
-    
+    var gts = GridTerminalSystem;  
     lzw = new LZWInputStream(2048);
 
     outputPanelL = (IMyTextPanel)gts.GetBlockWithName("movie theater screen left");
@@ -388,84 +374,86 @@ public Program()
     outputPanelR.FontSize = fontSize;
     outputPanelR.Alignment = VRage.Game.GUI.TextPanel.TextAlignment.LEFT;
     
+    Reset();
+
+    Runtime.UpdateFrequency = UpdateFrequency.Update1;
+}
+
+public void Reset()
+{
     unpackingFinished = false;
     decodingFinished = false;
     playbackFinished = false;
     processingConfigFinished = false;
     
+    itWholeMovieCycle = GetMovieCycleIterator();
+}
+
+public IEnumerator<bool> GetMovieCycleIterator()
+{
+    // decode base64 to byte[]
+    var stConfig = new ConfigState(this);
+    var itConfig = ProcessConfig(stConfig);
+    while (!processingConfigFinished)
+    {
+        Echo("processing config");
+        processingConfigFinished = !itConfig.MoveNext();
+        yield return false;
+    }
+
+    // unpack bits
+    var stUnpack = new LZWInputStream.UnpackBitsState(encodedMovie);
+    var itUnpack = lzw.UnpackBits(stUnpack, encodedMovie);
+    while (!unpackingFinished)
+    {
+        Echo("unpack next");
+        unpackingFinished = !itUnpack.MoveNext();
+        yield return false;
+    }
+
+    // decode with LZW
+    var stDecode = new LZWInputStream.DecoderState(Alphabet.StarWars, stUnpack.codes, stUnpack.outputStringLen);
+    var itDecode = lzw.Decode(stDecode, stUnpack.codes);
+    while (!decodingFinished)
+    {
+        Echo("decode next");
+        decodingFinished = !itDecode.MoveNext();
+        yield return false;
+    }
+
+    // playback
+    var movie = new AsciiMovie(this, new string(stDecode.text));
+    var itFrame = movie.GetFrameIterator();
     Runtime.UpdateFrequency = UpdateFrequency.Update1;
+    while (itFrame.MoveNext())
+    {
+        Echo("playing frame");
+        AsciiMovie.Frame f = itFrame.Current;
+        var itSingleFramePlayback = ShowFrame(f);
+    
+        while (!itSingleFramePlayback.Current)
+        {
+            Echo($"playing frame: sleeping ticks = {itFrame.Current.time}");
+            itSingleFramePlayback.MoveNext();
+            yield return false;
+        }
+    }
+    
+    Echo("playback finished!");
+    playbackFinished = true;    
 }
 
 public void Main(string argument, UpdateType updateSource)
 {
-    // decode base64 to byte[]
-    if (!processingConfigFinished)
+    if (updateSource == UpdateType.Update1)
     {
-        Echo("processing config");
-        processingConfigFinished = !itConfig.MoveNext();
-    }
-
-    // unpack bits
-    if (processingConfigFinished && !unpackingFinished)
-    {
-        if (stUnpack == null)
+        while (!itWholeMovieCycle.MoveNext())
         {
-            Echo("init unpacking state");
-            stUnpack = new LZWInputStream.UnpackBitsState(encodedMovie);
-            itUnpack = lzw.UnpackBits(stUnpack, encodedMovie);
-        }
-
-        Echo("unpack next");
-        unpackingFinished = !itUnpack.MoveNext();
-    }
-
-    // decode with LZW
-    if (!decodingFinished && unpackingFinished && processingConfigFinished)
-    {
-        if (stDecode == null)
-        {
-            Echo("init decoding state");
-            stDecode = new LZWInputStream.DecoderState(Alphabet.StarWars, stUnpack.codes, stUnpack.outputStringLen);
-            itDecode = lzw.Decode(stDecode, stUnpack.codes);
-        }
-
-        Echo("decode next");
-        decodingFinished = !itDecode.MoveNext();
-    }
-
-    // playback
-    if (decodingFinished && unpackingFinished && !playbackFinished && processingConfigFinished)
-    {
-        if (movie == null)
-        {
-            movie = new AsciiMovie(this, new string(stDecode.text));
-            itFrame = movie.GetFrameIterator();
-            Runtime.UpdateFrequency = UpdateFrequency.Update1;
-        }
-        
-        if (itSingleFramePlayback != null && !itSingleFramePlayback.Current)
-        {
-            Echo($"playing frame: sleeping ticks = {itFrame.Current.time}");
-            itSingleFramePlayback.MoveNext();
-        }
-        else
-        {
-            if (itFrame.MoveNext())
-            {
-                Echo("playing frame");
-                AsciiMovie.Frame f = itFrame.Current;
-                itSingleFramePlayback = ShowFrame(f);
-            }
-            else
-            {
-                Echo("playback finished!");
-                playbackFinished = true;
-            }
+            Echo($"playback status: {!playbackFinished}");
         }
     }
-
-    Echo($"nothing else to do: playback state {!playbackFinished}");
-    if (encodedMovie != null)
-        Echo($"encoded movie length: {encodedMovie.Length}");
-    
+    else
+    {
+        Reset();
+    }
 }
