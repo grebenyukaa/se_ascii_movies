@@ -440,7 +440,8 @@ public IEnumerator<bool> GetMovieCycleIterator()
     }
     
     Echo("playback finished!");
-    playbackFinished = true;    
+    playbackFinished = true;
+    yield return true;
 }
 
 public void Main(string argument, UpdateType updateSource)
