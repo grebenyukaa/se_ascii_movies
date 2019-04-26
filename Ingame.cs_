@@ -448,10 +448,8 @@ public void Main(string argument, UpdateType updateSource)
 {
     if (updateSource == UpdateType.Update1)
     {
-        while (!itWholeMovieCycle.MoveNext())
-        {
-            Echo($"playback status: {!playbackFinished}");
-        }
+        itWholeMovieCycle.MoveNext();
+        Echo($"playback status: {!playbackFinished}");
     }
     else
     {
