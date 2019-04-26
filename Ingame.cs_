@@ -44,11 +44,10 @@ static class Converter
 
 static class Alphabet
 {
-    public static char[] StarWars = {'g', 'v', '0', 'D', '9', 'J', 'C', 'k', 'N', 'n', 'M', 'V', '#', '~', 'H', 't', 'P',
-        '>', 'o', 'E', '|', '"', 'f', '4', 'z', 'b', '7', 'p', 'w', 'X', 'ÿ', 'a', ':', 'q', ' ', '$', 'U', '[',
-        '6', 'I', 'T', 'j', 'u', 'W', ')', 'i', 'Y', '+', 's', 'S', ';', 'c', 'B', '=', 'A', '^', '`', 'K', 'R',
-        'y', '%', '!', 'O', '/', 'e', '\\', ']', 'd', '?', 'F', '\'', '}', 'l', '.', '2', 'L', '_', 'G', '*', ',',
-        'x', 'r', '1', '{', 'm', '(', '\n', '-', '@', '5', '<', '8', '3', 'h'
+    public static char[] StarWars = {'q', 'O', 'j', '8', '}', 'v', 'x', 'l', '\n', 'G', '3', 'L', 'm', '/', '{', '*', 'D', '#', 's', ']', 'g',
+        'R', '>', '"', '7', ' ', 'E', ';', 'T', '6', 'I', 'z', '.', '0', '+', 'h', 'w', 'f', '|', '5', 'N', 'M', 'Y', '=', 'k', '?', 'A', 'b',
+        'd', 'B', '<', 'U', 'X', '1', 'u', '$', '\\', 'C', '[', '-', '~', 'S', ')', 'a', 'P', 'r', 't', 'W', 'n', 'o', 'y', '%', '!', '(', '4',
+        'V', '`', 'p', 'K', ':', 'e', '@', ',', 'F', '2', 'H', '9', 'J', '_', 'c', 'i', '\'', '^'
     };
 }
 
@@ -211,15 +210,19 @@ class LZWInputStream
 
 public class AsciiMovie
 {
-    public AsciiMovie(string decodedMovie)
+    public AsciiMovie(MyGridProgram prog, string decodedMovie)
     {
+        _this = prog;
         rowStream = decodedMovie.Split('\n');
     }
 
     public class Frame
     {
-        public Frame(IEnumerable<string> rows)
+        public Frame(MyGridProgram _this, int fid, string[] rows)
         {
+            _this.Echo($"Parsing frame {fid}");
+            //_this.Echo($"{string.Join("\n", rows.ToArray())}");
+
             var sTime = rows.FirstOrDefault();
             if (sTime.Length == 0)
                 throw new ArgumentException("bad frame data: empty");
@@ -236,10 +239,11 @@ public class AsciiMovie
         for (int fid = 0; fid < rowStream.Length / rowsPerFrame; ++fid)
         {
             IEnumerable<string> frameRows = rowStream.Skip(fid * rowsPerFrame).Take(rowsPerFrame);
-            yield return new Frame(frameRows.ToArray());
+            yield return new Frame(_this, fid, frameRows.ToArray());
         }
     }
 
+    private MyGridProgram _this;
     private string[] rowStream;
 }
 
@@ -247,28 +251,60 @@ public class AsciiMovie
 
 ////////////////////
 
-IMyTextPanel outputPanelL;
-IMyTextPanel outputPanelC;
-IMyTextPanel outputPanelR;
-int screenPaddingLeft;
-int screenPaddingRight;
+public class ConfigState
+{
+    public ConfigState(Program p)
+    {
+        var gts = p.GridTerminalSystem;
+        IMyTerminalBlock movieConfigBlock = gts.GetBlockWithName("movie theater server");
+        string configData = movieConfigBlock.CustomData;
 
-byte[] encodedMovie;
-AsciiMovie movie;
-int frameWidth;
-int frameHeight;
-IEnumerator<AsciiMovie.Frame> itFrame;
-IEnumerator<bool> itSingleFramePlayback;
+        encodedBatches = new List<byte[]>();
+        totalSize = 0;
 
-LZWInputStream lzw;
-LZWInputStream.UnpackBitsState stUnpack;
-IEnumerator<LZWInputStream.UnpackBitsState> itUnpack;
-LZWInputStream.DecoderState stDecode;
-IEnumerator<LZWInputStream.DecoderState> itDecode;
+        string[] splitted = configData.Split('\n');
+        dataVolumes = new List<IMyTerminalBlock>();
+        foreach (var id in splitted)
+        {
+            var blcs = new List<IMyTerminalBlock>();
+            p.Echo(id);
+            gts.SearchBlocksOfName(id, blcs);
+            dataVolumes.Add(blcs.First());
+        }
+    }
 
-bool unpackingFinished;
-bool decodingFinished;
-bool playbackFinished;
+    public void ProcessDataVolume(string data)
+    {
+        byte[] sub = Convert.FromBase64String(data);
+        totalSize += sub.Length;
+        encodedBatches.Add(sub);
+    }
+ 
+    public int totalSize { get; private set; }
+    public List<byte[]> encodedBatches { get; private set; }
+    public List<IMyTerminalBlock> dataVolumes { get; private set; }
+}
+
+public IEnumerator<bool> ProcessConfig(ConfigState st)
+{
+    Echo("process config");
+    foreach (var vol in st.dataVolumes)
+    {
+        Echo($"processing {vol.CustomName}");
+        Echo($"size {vol.CustomData.Length}");
+        st.ProcessDataVolume(vol.CustomData);
+        yield return false;
+    }
+
+    encodedMovie = new byte[st.totalSize];
+    int retIndex = 0;
+    foreach (var batch in st.encodedBatches)
+    {
+        Array.Copy(batch, 0, encodedMovie, retIndex, batch.Length);
+        retIndex += batch.Length;
+    }
+    yield return true;
+}
 
 public IEnumerator<bool> ShowFrame(AsciiMovie.Frame f)
 {
@@ -296,11 +332,41 @@ public IEnumerator<bool> ShowFrame(AsciiMovie.Frame f)
     yield return true;
 }
 
+IMyTextPanel outputPanelL;
+IMyTextPanel outputPanelC;
+IMyTextPanel outputPanelR;
+int screenPaddingLeft;
+int screenPaddingRight;
+
+byte[] encodedMovie;
+AsciiMovie movie;
+ConfigState stConfig;
+IEnumerator<bool> itConfig;
+
+int frameWidth;
+int frameHeight;
+IEnumerator<AsciiMovie.Frame> itFrame;
+IEnumerator<bool> itSingleFramePlayback;
+
+LZWInputStream lzw;
+LZWInputStream.UnpackBitsState stUnpack;
+IEnumerator<LZWInputStream.UnpackBitsState> itUnpack;
+LZWInputStream.DecoderState stDecode;
+IEnumerator<LZWInputStream.DecoderState> itDecode;
+
+bool processingConfigFinished;
+bool unpackingFinished;
+bool decodingFinished;
+bool playbackFinished;
+
 public Program()
 {
     var gts = GridTerminalSystem;
-    IMyTerminalBlock movieDataBlock = gts.GetBlockWithName("movie theater server");
+    stConfig = new ConfigState(this);
+    itConfig = ProcessConfig(stConfig);
     
+    lzw = new LZWInputStream(2048);
+
     outputPanelL = (IMyTextPanel)gts.GetBlockWithName("movie theater screen left");
     outputPanelC = (IMyTextPanel)gts.GetBlockWithName("movie theater screen center");
     outputPanelR = (IMyTextPanel)gts.GetBlockWithName("movie theater screen right");
@@ -322,24 +388,25 @@ public Program()
     outputPanelR.FontSize = fontSize;
     outputPanelR.Alignment = VRage.Game.GUI.TextPanel.TextAlignment.LEFT;
     
-    encodedMovie = Convert.FromBase64String(movieDataBlock.CustomData);
-
     unpackingFinished = false;
     decodingFinished = false;
     playbackFinished = false;
+    processingConfigFinished = false;
     
     Runtime.UpdateFrequency = UpdateFrequency.Update1;
 }
 
 public void Main(string argument, UpdateType updateSource)
 {
-    if (lzw == null)
+    // decode base64 to byte[]
+    if (!processingConfigFinished)
     {
-        Echo("init LZW stream");
-        lzw = new LZWInputStream(2048);
+        Echo("processing config");
+        processingConfigFinished = !itConfig.MoveNext();
     }
 
-    if (!unpackingFinished)
+    // unpack bits
+    if (processingConfigFinished && !unpackingFinished)
     {
         if (stUnpack == null)
         {
@@ -352,7 +419,8 @@ public void Main(string argument, UpdateType updateSource)
         unpackingFinished = !itUnpack.MoveNext();
     }
 
-    if (!decodingFinished && unpackingFinished)
+    // decode with LZW
+    if (!decodingFinished && unpackingFinished && processingConfigFinished)
     {
         if (stDecode == null)
         {
@@ -365,11 +433,12 @@ public void Main(string argument, UpdateType updateSource)
         decodingFinished = !itDecode.MoveNext();
     }
 
-    if (decodingFinished && unpackingFinished && !playbackFinished)
+    // playback
+    if (decodingFinished && unpackingFinished && !playbackFinished && processingConfigFinished)
     {
         if (movie == null)
         {
-            movie = new AsciiMovie(new string(stDecode.text));
+            movie = new AsciiMovie(this, new string(stDecode.text));
             itFrame = movie.GetFrameIterator();
             Runtime.UpdateFrequency = UpdateFrequency.Update1;
         }
@@ -396,4 +465,7 @@ public void Main(string argument, UpdateType updateSource)
     }
 
     Echo($"nothing else to do: playback state {!playbackFinished}");
+    if (encodedMovie != null)
+        Echo($"encoded movie length: {encodedMovie.Length}");
+    
 }

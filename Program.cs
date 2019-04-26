@@ -86,10 +86,37 @@ namespace test
                 {
                     using (StreamWriter sw = new StreamWriter($"movies/ascii_star_wars.base64.{storageIDs[storID]}.txt"))
                     {
-                        int size = ((i + blockSize) < base64.Length) ? blockSize : (base64.Length - 1 - i);
+                        int size = ((i + blockSize) < base64.Length) ? blockSize : (base64.Length - i);
                         sw.Write(base64, i, size);
                     }
                 }
+
+                string recombinedBase64 = "";
+                List<byte[]> parts = new List<byte[]>();
+                int total = 0;
+                for (int storID = 0; storID < storageIDs.Length; ++storID)
+                {
+                    using (StreamReader _sr = new StreamReader($"movies/ascii_star_wars.base64.{storageIDs[storID]}.txt"))
+                    {
+                        string _base64 = _sr.ReadToEnd();
+                        recombinedBase64 += _base64;
+                        byte[] bytes = Convert.FromBase64String(_base64);
+                        total += bytes.Length;
+                        parts.Add(bytes);
+                    }
+                }
+                Console.WriteLine($"integrity check recombined base64: {recombinedBase64.GetHashCode() == (new string(base64)).GetHashCode()}");
+
+                byte[] recombined = new byte[total];
+                int ri = 0;
+                foreach (var part in parts)
+                {
+                    Array.Copy(part, 0, recombined, ri, part.Length);
+                    ri += part.Length;
+                }
+                
+                bool check = recombined.Zip(encoded, (x, y) => x == y).All(x => x);
+                Console.WriteLine($"integrity check recombined bytecode: {check}");
 
                 using (StreamWriter sw = new StreamWriter($"movies/ascii_star_wars.base64.txt"))
                 {
