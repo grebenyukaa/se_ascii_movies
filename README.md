@@ -2,13 +2,24 @@
 
 This facility helps to play ASCII movies in Space Engineers, using only ingame scripts. It does not however help one create an ASCII movie. The usability and robustness of this facility could be better, but alas, it is not :D.
 
-Internally it compresses a text movie file using a modified version of the LZW algorithm and outputs a base64 encoded binary file.
+Internally it compresses a text movie file using a modified version of the LZW algorithm and outputs a base64 encoded binary file separated into 64kb chunks with unique identifiers.
+
+## How to store a movie ingame
+The maximum size of data, that can be stored by CustomData field of IMyTerminalBlock is 64kb, or 64000 symbols. Usually your compressed movie size will far exceed this limit. Therefore to store a movie ingame you need some kind of a datastorage, e.g. an isolated group of IMyTerminal blocks (a pack of batteries on small grid for example), which you will fill with your movie chunks. This facility splits the output encoded movie into as many chuncks, as needed, and stores it in movies/output/movie_name.base64.{GUID}.txt format.
+
+So, to store it ingame you need to follow theese steps:
+  1. Open movies/output/ folder, look for movie_name.base64.{GUID}.txt files.
+  1. For each GUID of a file of the aforementioned pattern:
+      1. Cretate a terminal block (e.g. small battery), name it so that it contains that GUID (e.g. volume GUID).
+      1. Put the text from the file to the CustomData field of the block 
 
 ## How to play a movie ingame
-To playback this movie inside the game you need to follow theese steps (also see [Ingame.cs_](https://github.com/grebenyukaa/se_ascii_movies/blob/master/Ingame.cs_)):
+So you have already stored your movie in ypur data storage and want to play it. To achieve this you need to follow theese steps (also see [Ingame.cs_](https://github.com/grebenyukaa/se_ascii_movies/blob/master/Ingame.cs_)):
   1. Create a programmable block, named "movie theater server"
-  1. Create somewhere on the same grid an LCD screen, named "movie theater screen"
-  1. Put base64 encoded data into programmable block's CustomData field.
+  1. Create somewhere on the same grid 3 LCD screens, named "movie theater screen left", "movie theater screen center" and "movie theater screen right". Set them in "text and images" mode.
+  1. Put GUIDs of your storage "volumes" into the programmable block's CustomData. One GUID per row. Keep in mind, that order matters, so I recommend to just copy-paste [those](https://github.com/grebenyukaa/se_ascii_movies/blob/master/src/Program.cs#L39) omtting quotation marks.
+  1. Look for movies/output/alphabet.txt file.
+  1. Put contents of this file into [this variable in Ingame.cs_](https://github.com/grebenyukaa/se_ascii_movies/blob/master/Ingame.cs_#L353). This is a base64 encoded alphabet of the LZW encoding/decoding algorithm.
   1. Put contents of [Ingame.cs_](https://github.com/grebenyukaa/se_ascii_movies/blob/master/Ingame.cs_) into the code of the programmable block.
   1. Run the code.
 
@@ -16,8 +27,7 @@ To playback this movie inside the game you need to follow theese steps (also see
 Install vscode with nuget and omnisharp.
 
 To create a base64 encoded compressed movie you need to follow theese steps (see [Program.cs](https://github.com/grebenyukaa/se_ascii_movies/blob/master/Program.cs)):
-  1. Specify the alphabet of your text movie in [Alphabet.cs](https://github.com/grebenyukaa/se_ascii_movies/blob/master/Alphabet.cs) and [Ingame.cs_](https://github.com/grebenyukaa/se_ascii_movies/blob/master/Ingame.cs_). Currently the only alphabet supported is the alphabet of assciimation's Star Wars. An alphabet is a set of distinct characters in your movie representation.
-  1. Adjust paths and the alphabet in [Program.cs](https://github.com/grebenyukaa/se_ascii_movies/blob/master/Program.cs) to your own needs to create the encoded movie
+  1. Adjust paths in [Program.cs](https://github.com/grebenyukaa/se_ascii_movies/blob/master/Program.cs) to your own needs to create the encoded movie
   1. Run the program and wait until it finishes.
 
 ## Frame format
