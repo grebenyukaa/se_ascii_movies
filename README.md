@@ -46,4 +46,4 @@ N strings of the frame data | string[]
 The ingame script decodes data in blocks across multiple ticks. The blocksize of 2048 bytes seems to be close to the perfomance cap of a user script on a single tick in Space Engineers. Currently different frame delays are not actually supported and are ignored in playback algorithm.
 
 ## Examples
-This repo contains an already prepared Star Wars movie from [asciimation](http://www.asciimation.co.nz/). To play it, follow the steps from the section "How to play a movie ingame".
+This repo contains an already prepared Star Wars movie from [asciimation](http://www.asciimation.co.nz/). To play it, follow the steps from the sections "How to store a movie ingame" and "How to play a movie ingame".
