@@ -14,7 +14,7 @@ So, to store it ingame you need to follow theese steps:
       1. Put the text from the file to the CustomData field of the block 
 
 ## How to play a movie ingame
-So you have already stored your movie in ypur data storage and want to play it. To achieve this you need to follow theese steps (also see [Ingame.cs_](https://github.com/grebenyukaa/se_ascii_movies/blob/master/Ingame.cs_)):
+So you have already stored your movie in your data storage and want to play it. To achieve this you need to follow theese steps (also see [Ingame.cs_](https://github.com/grebenyukaa/se_ascii_movies/blob/master/Ingame.cs_)):
   1. Create a programmable block, named "movie theater server"
   1. Create somewhere on the same grid 3 LCD screens, named "movie theater screen left", "movie theater screen center" and "movie theater screen right". Set them in "text and images" mode.
   1. Put GUIDs of your storage "volumes" into the programmable block's CustomData. One GUID per row. Keep in mind, that order matters, so I recommend to just copy-paste [those](https://github.com/grebenyukaa/se_ascii_movies/blob/master/src/Program.cs#L39) omtting quotation marks.
