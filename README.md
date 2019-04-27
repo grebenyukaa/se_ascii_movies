@@ -5,7 +5,7 @@ This facility helps to play ASCII movies in Space Engineers, using only ingame s
 Internally it compresses a text movie file using a modified version of the LZW algorithm and outputs a base64 encoded binary file separated into 64kb chunks with unique identifiers.
 
 ## How to store a movie ingame
-The maximum size of data, that can be stored by CustomData field of IMyTerminalBlock is 64kb, or 64000 symbols. Usually your compressed movie size will far exceed this limit. Therefore to store a movie ingame you need some kind of a datastorage, e.g. an isolated group of IMyTerminal blocks (a pack of batteries on small grid for example), which you will fill with your movie chunks. This facility splits the output encoded movie into as many chuncks, as needed, and stores it in movies/output/movie_name.base64.{GUID}.txt format.
+The maximum size of data, that can be stored by CustomData field of IMyTerminalBlock is 64kb, or 64000 symbols. Usually your compressed movie size will far exceed this limit. Therefore to store a movie ingame you need some kind of a datastorage, e.g. an isolated group of IMyTerminal blocks (a pack of batteries on small grid for example), which you will fill with your movie's chunks. This facility splits the output encoded movie into as many chuncks, as needed, and stores it in movies/output/movie_name.base64.{GUID}.txt format.
 
 So, to store it ingame you need to follow theese steps:
   1. Open movies/output/ folder, look for movie_name.base64.{GUID}.txt files.
